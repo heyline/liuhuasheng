@@ -1,0 +1,304 @@
+<!--
+ * @Author: Peanut
+ * @Date: 2024-11-13 14:33:09
+ * @LastEditTime: 2024-11-15 16:52:34
+ * @LastEditors: Peanut
+ * @Description: 
+-->
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Map</title>
+    <script type="text/javascript">
+      window._AMapSecurityConfig = {
+        securityJsCode: "ab3d4caa899e870e6447e0e926c10075",
+      };
+    </script>
+
+    <script src="https://webapi.amap.com/maps?v=2.0&key=d8f9bb6c29d8d73a6cc7158a6e8db16e&plugin=AMap.PlaceSearch&plugin=AMap.MouseTool"></script>
+    <!-- <script src="https://webapi.amap.com/loader.js"></script> -->
+    <style>
+      html,
+      body,
+      #container {
+        width: 100%;
+        height: 100%;
+      }
+      #SearchAddress {
+        position: fixed;
+        top: 10px;
+        width: 30%;
+        right: 5%;
+        z-index: 1000;
+        padding: 5px 10px;
+        display: flex;
+        font-size: 13px;
+        color: #333;
+      }
+      .searchBox {
+        width: 55%;
+        height: 80px;
+        padding: 5px 20px;
+        background-color: #f1f1f1;
+      }
+      .showPointsBox {
+        width: 300px;
+        height: 200px;
+        overflow-y: auto;
+      }
+      .topInputBox {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      #keyWordsPut {
+        width: 95%;
+      }
+      .btnBox {
+        margin-top: 20px;
+        /* width: 100%; */
+        box-sizing: border-box;
+        display: flex;
+        justify-content: space-between;
+      }
+      .btn {
+        font-size: 15px;
+        width: 40%;
+        background-color: #67b4f9;
+        border-radius: 10px;
+        text-align: center;
+        border: 1px solid rgb(102, 164, 223);
+        cursor: pointer;
+      }
+      .btn2 {
+        width: 50px;
+        height: 30px;
+        background-color: #c55022;
+      }
+      #myTextarea {
+        max-width: 250px;
+        min-width: 250px;
+        max-height: 160px;
+        min-height: 160px;
+      }
+      #AlertMsgBox {
+        position: fixed;
+        z-index: 1000;
+        top: 10%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        padding: 10px 20px;
+        border-radius: 10px;
+        background-color: #a1b6f8;
+        color: #315efb;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container"></div>
+    <div id="SearchAddress">
+      <div class="searchBox">
+        <div class="topInputBox">
+          <p>请输入关键字进行搜索：</p>
+          <button class="btn btn2" onclick="reset()">复位</button>
+        </div>
+        <input id="keyWordsPut" placeholder="请输入关键字搜索" />
+        <div class="btnBox">
+          <button class="btn" id="startEditBtn" onclick="startEdit()">
+            编辑图层
+          </button>
+          <button class="btn" id="endEditBtn" onclick="endEdit()">
+            结束编辑
+          </button>
+        </div>
+        <div class="btnBox">
+          <button class="btn" id="clearBtn" onclick="clearHandle()">
+            清除所有
+          </button>
+
+          <button class="btn" id="endEditBtn" onclick="copyPoints()">
+            复制点位
+          </button>
+        </div>
+      </div>
+      <div class="showPointsBox">
+        <textarea id="myTextarea" placeholder="关键字点位集合"></textarea>
+      </div>
+    </div>
+    <div id="AlertMsgBox">提示信息</div>
+
+    <script type="text/javascript">
+      //地图初始化
+      const map = new AMap.Map("container", {
+        viewMode: "2D", //默认使用 2D 模式
+        resizeEnable: true,
+        zoom: 14, //地图级别
+        center: [120.121288, 30.222724], //地图中心点(杭州西湖)
+      });
+
+      //   输入提示
+      var autoOptions = {
+        input: "keyWordsPut",
+        city: "全国",
+      };
+      var mouseTool; //定义工具
+      var keyWordsPutBox = document.getElementById("keyWordsPut");
+      var textarea = document.getElementById("myTextarea"); // 获取文本域元素
+      var popup = document.getElementById("AlertMsgBox"); //获取提示信息弹窗元素\
+      var drawPolygon; //定义多边形鼠标绘制工具
+      var overlays = []; //监听draw事件可获取画好的覆盖物
+
+      //使用地图插件
+      AMap.plugin(
+        ["AMap.PlaceSearch", "AMap.AutoComplete", "AMap.MouseTool"],
+        function () {
+          var auto = new AMap.AutoComplete(autoOptions);
+          var placeSearch = new AMap.PlaceSearch({
+            map: map,
+          }); //构造地点查询类
+          auto.on("select", select); //注册监听，当选中某条记录时会触发
+          function select(e) {
+            placeSearch.setCity(e.poi.adcode);
+            placeSearch.search(e.poi.name);
+            let singlePointSet = [e.poi.location.lng, e.poi.location.lat]; //单个点
+            textarea.value = JSON.stringify(singlePointSet); // 设置textarea的内容
+          }
+          //在地图中添加MouseTool插件
+          mouseTool = new AMap.MouseTool(map);
+          //   drawPolygon = mouseTool.polygon(); //用鼠标工具画多边形
+          //   AMap.event?.addListener?.(mouseTool, "draw", function (e) {
+          //     console.log(e.obj.getPath()); //获取路径/范围
+          //   });
+        }
+      );
+
+      // 浏览器自带clipboard API实现复制粘贴（推荐） 复制文本到剪切板
+      async function copyTextToClipboard(text) {
+        try {
+          await navigator.clipboard.writeText(text);
+          console.log("Text copied to clipboard");
+          showAlert("点位复制成功", 3);
+        } catch (err) {
+          console.error("Failed to copy: ", err);
+          showAlert("点位复制失败", 3);
+        }
+      }
+
+      // 显示提示信息
+      const showAlert = (text, seconds) => {
+        popup.style.display = "block";
+        popup.innerHTML = text;
+        // 设置几秒后执行的函数
+        setTimeout(function () {
+          popup.style.display = "none"; // 移除弹窗
+        }, seconds * 1000);
+      };
+
+      //清一清关键词信息 点位信息 提示信息...
+      const deleteInfo = (mode) => {
+        // map.clearMap(); //清除地图上的所有覆盖物
+        var markerElements = document.querySelectorAll(".amap-marker");
+        markerElements.forEach(function (element) {
+          element.parentNode.removeChild(element);
+        });
+
+        keyWordsPutBox.value = ""; //清空关键词搜索框
+        textarea.value = ""; //清空textarea
+        popup.style.display = "none"; // 移除弹窗
+        switch (mode) {
+          case 1: //模式3和模式4不常用，此处主要用1和2
+            map.setDefaultCursor("default"); //设置鼠标样式 pointer default move crosshair
+            break;
+          case 2:
+            map.setDefaultCursor("crosshair");
+            break;
+          case 3:
+            map.setDefaultCursor("pointer");
+            break;
+          case 4:
+            map.setDefaultCursor("move");
+            break;
+          default:
+            break;
+        }
+      };
+
+      //复位 地图 至  指定缩放比例 指定中心地点
+      const reset = () => {
+        map.clearMap(); //清除地图上的所有覆盖物
+        map.setZoomAndCenter(14, [120.121288, 30.222724]); // 缩放比例14  中心点位西湖
+      };
+
+      // 编辑图层
+      const startEdit = () => {
+        // console.log("编辑图层》》》");
+        deleteInfo(2);
+        let showHtml = `<p>可以使用鼠标左键单击在地图上编辑图层啦</p>
+                        <p>注意：使用鼠标右键单击或双击可停止编辑!</p>
+                     `;
+        showAlert(showHtml, 10);
+        // drawPolygon;
+        mouseTool.polygon({
+          strokeColor: "#FF33FF",
+          strokeOpacity: 1,
+          strokeWeight: 6,
+          strokeOpacity: 0.2,
+          fillColor: "#1791fc",
+          fillOpacity: 0.4,
+          // 线样式还支持 'dashed'
+          strokeStyle: "solid",
+          // strokeStyle是dashed时有效
+          // strokeDasharray: [30,10],
+        });
+        mouseTool.on("draw", function (event) {
+          overlays.push(event.obj);
+          let pointsArr = event.obj.getPath(); //event.obj 为绘制出来的覆盖物对象，使用 getPath 获取路径/范围
+          let polygonPointsSet = []; //多边形覆盖物对象的点集合
+          for (let i = 0; i < pointsArr.length; i++) {
+            polygonPointsSet.push([pointsArr[i].lng, pointsArr[i].lat]);
+          }
+          textarea.value = JSON.stringify(polygonPointsSet); // 设置textarea的内容
+        });
+      };
+
+      // 结束编辑
+      const endEdit = () => {
+        // console.log("结束编辑》》》");
+        deleteInfo(1);
+        mouseTool.close(); //关闭编辑操作
+      };
+
+      // 清除所有
+      const clearHandle = () => {
+        // console.log("清除所有》》》");
+        deleteInfo(1);
+        mouseTool.close(true); //关闭，并清除覆盖物
+      };
+
+      // 复制点位
+      const copyPoints = () => {
+        map.setDefaultCursor("default"); //设置鼠标样式 pointer default move crosshair
+        var copytxt = textarea.value;
+        if (!copytxt) {
+          showAlert("没有可复制的点位", 3);
+        } else {
+          copyTextToClipboard(copytxt);
+        }
+      };
+
+      const test = () => {
+        console.log("1");
+        setTimeout(() => {
+          console.log("2");
+          Promise.resolve().then(() => console.log("3"));
+        });
+        Promise.resolve().then(() => console.log("4"));
+        console.log("5");
+      };
+      test();
+    </script>
+  </body>
+</html>
